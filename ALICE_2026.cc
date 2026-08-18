@@ -39,20 +39,15 @@ namespace Rivet {
     const double pTmin = 0.5; // GeV
     const double pTmax = 8.0; //GeV
     
-    //Alice primary particles for signal
-    declare(ALICE::PrimaryParticles(Cuts::absrap <= etamax && Cuts::pT > pTmin*GeV && Cuts::pT < pTmax*GeV), "APRIM");
+      // Primary particles.
+    PrimaryParticles pp({Rivet::PID::PIPLUS, Rivet::PID::KPLUS, Rivet::PID::K0S, Rivet::PID::K0L,
+                           Rivet::PID::PROTON, Rivet::PID::NEUTRON, Rivet::PID::LAMBDA,
+                           Rivet::PID::SIGMAMINUS, Rivet::PID::SIGMAPLUS, Rivet::PID::XIMINUS,
+                           Rivet::PID::XI0, Rivet::PID::OMEGAMINUS},
+                          Cuts::abseta < etamax && Cuts::pT > pTmin * GeV && Cuts::pT < pTmax * GeV);
+    declare(pp,"APRIM");
 
-    // Primary particles for event mixing.
-    PrimaryParticles pp(
-      {Rivet::PID::PIPLUS, Rivet::PID::KPLUS,
-	      Rivet::PID::K0S, Rivet::PID::K0L, Rivet::PID::PROTON,
-	      Rivet::PID::NEUTRON, Rivet::PID::LAMBDA, Rivet::PID::SIGMAMINUS,
-       	Rivet::PID::SIGMAPLUS, Rivet::PID::XIMINUS, Rivet::PID::XI0,
-	      Rivet::PID::OMEGAMINUS, Rivet::PID::PHI},
-        Cuts::absrap <= etamax && Cuts::pT > pTmin*GeV && Cuts::pT < pTmax*GeV);
-    declare(pp,"PRIM");
-    // charged final state for event mixing
-    ChargedFinalState cfsMult(Cuts::absrap < etamax);//rapidity cut
+    ChargedFinalState cfsMult(Cuts::abseta < etamax);//rapidity cut
 
       // The event mixing projection
     declare(EventMixingFinalState(cfsMult, pp, 10, 0, 100, 10, defaultWeightIndex()),"EVM");
@@ -65,7 +60,7 @@ namespace Rivet {
             {3312, 3312}, {3312, -3312}, {2212, 2212}, {2212, -2212}, {2212, 3334}, {2212, -3334},
             {3334, 3334}, {3334, -3334} };
       // The differing pT cuts per pair, in GeV.
-    pTcuts = {{0.5, 0.5}, {0.5, 0.5}, {0.5, 0.9}, {0.5, 0.9}, {0.5, 0.5}, {0.5, 0.5}, {0.5, 0.5}, {0.5, 0.5}, 
+    pTcuts = {{0.5, 0.5}, {0.5, 0.5}, {0.5, 0.9}, {0.5, 0.9}, {0.5, 0.5}, {0.5, 0.5},
               {0.9, 0.9}, {0.9, 0.9}, {0.5, 0.5}, {0.5, 0.5}, {0.5, 0.9}, {0.5, 0.9}, {0.9, 0.9}, {0.9, 0.9}}; 
     //The differing pT cuts fo lambdas histograms
     pTcuts_lamb = {{0.5, 1.25}, {1.25, 2.5}, {2.5, 4}, {4, 8}};
@@ -99,14 +94,14 @@ namespace Rivet {
     //booking histograms for lambda pairs for different pt regions
     for(int i =0; i < (int)Names_lamb.size(); i++){
       //lambda-lambda
-      book(ratioCP_lamb[i].first, Names_lamb[i].first,  29, -1.408300e+00, 4.874885e+00);
+      book(ratioCP_lamb[i].first, (int)Names.size()+i*2+1, 1, 1);
       book(signal_lamb[i].first, "TMP/" + Names_lamb[i].first + "_signal", refData(1, 1, 1));
       book(background_lamb[i].first, "TMP/" + Names_lamb[i].first + "_background", refData(1, 1, 1));
       book(nsp_lamb[i].first, "TMP/" + Names_lamb[i].first + "_signal_counter");
       book(nmp_lamb[i].first, "TMP/" + Names_lamb[i].first + "_background_counter");
       
       //lambda-antilambda
-      book(ratioCP_lamb[i].second, Names_lamb[i].second,  29, -1.408300e+00, 4.874885e+00);
+      book(ratioCP_lamb[i].second, (int)Names.size()+i*2+2, 1, 1);
       book(signal_lamb[i].second, "TMP/" + Names_lamb[i].second + "_signal", refData(1, 1, 1));
       book(background_lamb[i].second, "TMP/" + Names_lamb[i].second + "_background", refData(1, 1, 1));
       book(nsp_lamb[i].second, "TMP/" + Names_lamb[i].second + "_signal_counter");
@@ -128,7 +123,8 @@ namespace Rivet {
           iPair = i;
           break;
         }
-        else if(pid[i].second>0 && pid[i].first>0 && -pid[i].first == p1.pid() && -pid[i].second == p2.pid()){ //(- -) pairs <-- automatically added to (+ +)
+        else if((pid[i].first == pid[i].second || abs(pid[i].first) != abs(pid[i].second)) && -pid[i].first == p1.pid() && -pid[i].second == p2.pid()){ 
+          //(- -), (- +) pairs <-- automatically added to (+ +) (+ -)
           iPair = i;
           break;
         }
@@ -189,22 +185,20 @@ namespace Rivet {
     void analyze(const Event& event) {
       if (!apply<ALICE::V0AndTrigger>(event, "V0-AND")()) return;
 
-      const PrimaryParticles& pp = apply<PrimaryParticles>(event,"PRIM");
-      const ALICE::PrimaryParticles& App = apply<ALICE::PrimaryParticles>(event,"APRIM");
+      const PrimaryParticles& pp = apply<PrimaryParticles>(event,"APRIM");
       const EventMixingFinalState& evm = apply<EventMixingFinalState>(event, "EVM");
 
       // Test if we have enough mixing events available to continue.
       if (!evm.hasMixingEvents()) return;
 
-      // First do the signal histograms for ALICE primary particles.
-      for (const Particle& p1 :App.particles()) {
-        for (const Particle& p2 : App.particles()){
+
+      for (const Particle& p1 : pp.particles()) {
+	      // First do the signal histograms.
+        for (const Particle& p2 : pp.particles()){
           fillPair(p1, p2, signal, nsp);
           fillPair_lamb(p1, p2, signal_lamb, nsp_lamb);
         }
-      }
-      // Then do the background for primary particles.
-      for (const Particle& p1 : pp.particles()) {
+        // Then do the background
         for (const Particle& p2 : evm.particles()){
           fillPair(p1, p2, background, nmp);
           fillPair_lamb(p1, p2, background_lamb, nmp_lamb);
